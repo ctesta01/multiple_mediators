@@ -1,0 +1,184 @@
+### Methodology
+
+The example I'll work below based on a simulated data set will reflect a situation 
+where there are two mediators, one of which has a causal effect on the second.
+
+Considering our set of confounding covariates as $C$, our exposure of interest $A$, 
+our first mediator as $M^{(1)}$, our second mediator as $M^{(2)}$, and our 
+outcome as $Y$, the causal diagram looks like the following:
+
+```{r, engine='tikz', echo=F, out.width='40%', fig.align='center'}
+\tikzset{>=stealth} % use nicer arrowheads
+\begin{tikzpicture}
+
+  \node (c) at (0,0) {$C$}; % specify nodes
+  \node (a) at (1,0) {$A$};
+  \node (m1) at (2.33,0) {$M^{(1)}$};
+  \node (m2) at (3.9,0) {$M^{(2)}$};
+  \node (y) at (5.2,0) {$Y$};
+
+  \tikzset{every edge/.append style={->}} % specify horizontal edges
+  \path (c.east) edge (a.west);
+  \path (a.east) edge (m1.west);
+  \path (m1.east) edge (m2.west);
+  \path (m2.east) edge (y.west);
+
+  \tikzset{out=90, in=90, every edge/.append style={->}} % specify edges on top
+  \path (c.north) edge (m1.north);
+  \path (c.north) edge (m2.north);
+  \path (c.north) edge (y.north);
+  \path (m1.north) edge (y.north);
+
+  \tikzset{out=-90, in=-90, every edge/.append style={->}} % specify edges on bottom
+  \path (a.south) edge (m2.south);
+  \path (a.south) edge (y.south);
+
+\end{tikzpicture}
+```
+
+In general, to perform mediation analyses with $K$ mediators where there are no
+exposure-mediator or mediator-mediator interactions, one estimates the following
+$K+1$ regression equations:
+
+$$ \mathbb E[Y | a, m, c] = \theta_0 + \theta_1 a + \theta_2^{(1)} m^{(1)} +
+\cdots + \theta_2^{(K)}m^{(K)} + \theta_4'$$
+
+$$ \mathbb E[M^{(i)} | a, c] = \beta_0^{(i)} + \beta_1^{(i)}a + \beta_2^{(i)\prime}c \text{ for } i = 1,\dots,K.$$ 
+Now we can define our controlled direct effect, natural direct effect, and 
+natural indirect effect.  Since there are no exposure-mediator interactions, the 
+controlled direct effect and natural direct effect are equivalent.
+
+$$\text{CDE}(m) = \theta_1(a-a^*)$$
+
+$$\text{NDE} = \theta_1(a-a^*)$$
+
+$$\text{NIE} = (\beta_1^1 \theta_2^1 + \dots + \beta_1^k \theta_2^k)(a-a^*)$$
+Remember that in order for these values to have a valid causal interpretation, the standard assumptions from causal inference must be true: 
+
+  1. Conditional on $C$, there is no unmeasured confounding of the exposure-outcome relationship.
+  2. There is no unmeasured confounding of the mediator outcome relationship conditioning on $A$ and $C$. 
+  3. Conditioning on $C$, there is no unmeasured confounding of the exposure-mediator relationship. 
+  4. There are no mediator-outcome confounders which are affected by the exposure $A$.
+  
+In the case of multiple mediators, these assumptions must be true for all of the mediators.
+
+
+### Simulated Data 
+
+Let's work out an example with simulated data now.
+
+In this example, $M^{(2)}$ will have a causal dependency on both $A$ and
+$M^{(1)}$. Further, $Y$ will depend on each of $A$, $M^{(1)}$, and $M^{(2)}$ but
+there will not be any exposure-mediator or mediator-mediator interactions.
+
+For simplicity in these examples, we won't include confounding covariates $C$.
+
+```{r, echo=F, warning=F, message=F}
+library(broom)
+library(tidyverse)
+```
+
+```{r}
+N <- 1000
+A <- rbinom(size = 1, prob = 0.5, n = N)
+M1 <- A + rnorm(sd = .25, n = N)
+M2 <- -.5*A + 2*M1 + rnorm(sd = .45, n = N)
+Y <- .1*A + .3*M1 + .2*M2 + rnorm(sd = .25, n = N)
+```
+
+```{r, echo=F, warning=F, message=F}
+df <- data.frame(A, M1, M2, Y)
+
+ggplot(df, aes(A, Y)) + 
+  geom_smooth(method='lm', se=F) + 
+  geom_point() + 
+  ggtitle("The relationship between A and Y")
+
+ggplot(df, aes(x = Y, fill = as.character(A), group = as.character(A))) + 
+  geom_histogram(position = 'identity', alpha = 0.5) + 
+  labs(fill = "A") + 
+  ggtitle("The relationship between A and Y")
+
+ggplot(df, aes(M1, Y, color = as.character(A))) + 
+  geom_point(alpha=0.5) + 
+  labs(color = "A") + 
+  ggtitle("The relationship between M1 and Y")
+
+ggplot(df, aes(M2, Y, color = as.character(A))) + 
+  geom_point(alpha=0.5) + 
+  labs(color = "A") + 
+  ggtitle("The relationship between M2 and Y")
+  
+ggplot(df, aes(M1, M2, color = as.character(A))) + 
+  geom_point(alpha=0.5) + 
+  labs(color = "A") + 
+  ggtitle("The relationship between M1 and M2")
+```
+
+
+### Mediation Analysis
+
+```{r, fig.height=3}
+library(broom)
+library(tidyverse)
+
+# fit models
+Y_model <- lm(Y ~ A + M1 + M2)
+M1_model <- lm(M1 ~ A)
+M2_model <- lm(M2 ~ A)
+
+# print the coefficients from E[Y|a,m1,m2] 
+arm::coefplot(Y_model, intercept = TRUE,
+              main = "Regression Estimates from Y ~ A + M1 + M2") 
+
+# plot the coefficients from E[M1|a] 
+arm::coefplot(M1_model, intercept = TRUE,
+              main = "Regression Estimates from M1 ~ A") 
+
+# print the coefficients from E[M2|a] 
+arm::coefplot(M2_model, intercept = TRUE,
+              main = "Regression Estimates from M2 ~ A")
+```
+
+```{r}
+# pull out the model coefficients
+thetas <- tidy(Y_model)
+betas_M1 <- tidy(M1_model)
+betas_M2 <- tidy(M2_model)
+
+# Natural Direct Effect
+NDE <- thetas %>% filter(term == 'A') %>% pull(estimate)
+print(NDE)
+
+# Natural Indirect Effect
+beta_M1_1 <- betas_M1 %>% filter(term == 'A') %>% pull(estimate)
+beta_M2_1 <- betas_M2 %>% filter(term == 'A') %>% pull(estimate)
+theta_M1 <- thetas %>% filter(term == 'M1') %>% pull(estimate)
+theta_M2 <- thetas %>% filter(term == 'M2') %>% pull(estimate)
+NIE_M1 <- beta_M1_1 * theta_M1 
+NIE_M2 <- beta_M2_1 * theta_M2 
+print(NIE_M1)
+print(NIE_M2)
+NIE <- NIE_M1 + NIE_M2
+print(NIE)
+```
+
+One of the interesting things about the natural 
+indirect effect with multiple mediators is that we can describe proportionally 
+how much of the natural indirect effects are expressed through each 
+mediator.  In this case `r round(NIE_M1 / NIE * 100)`% of the NIE 
+is through $M^{(1)}$ and the remaining `r round(NIE_M2 / NIE * 100)`% 
+is through $M^{(2)}$. 
+
+```{r}
+knitr::kable(tidy(lm(Y~A)))
+
+# Total Effect, TE = NIE + NDE
+print(NIE + NDE)
+```
+
+Calculating the total effect in these two ways gives us an opportunity to
+confirm that they agree as a spot-check for our work.  In this case, we can 
+see that the total effect estimated as `NIE + NDE` is exactly the same as 
+the total effect estimated as the coefficient on $A$ in the regression 
+$Y\sim A$.
