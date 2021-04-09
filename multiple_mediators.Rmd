@@ -6,11 +6,11 @@ date: "March 17, 2021"
 
 # Introduction
 
-The following approaches are taken from [*Mediation Analysis with
+The following approaches are based on [*Mediation Analysis with
 Multiple Mediators* by Tyler VanderWeele and Stijn Vansteelandt (2014)](https://www.degruyter.com/document/doi/10.1515/em-2012-0010/html).
 
-Below are two approaches for dealing with multiple mediators: a regression 
-based approach and a weighting-based approach.
+Below is the first of two approaches for dealing with multiple mediators: a
+regression based approach, and a weighting-based approach (not here yet).
 
 ## Regression-Based Approach {.tabset .tabset-fade}
 
